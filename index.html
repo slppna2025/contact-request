@@ -435,11 +435,11 @@ input::placeholder, textarea::placeholder { color: #aaa; }
     <p id="pend-ref" style="font-size:.76rem;color:#aaa;"></p>
     <div class="apanel">
       <h4>⏳ Approval Process</h4>
-      <p>Reference: <span id="apanel-ref" class="rcode"></span> has been sent to <strong>rdmcdata@gmail.com</strong>.</p>
-      <p>Once approved, the contact list will be sent to your email. No further action needed.</p>
-      <p style="font-size:.74rem;color:#888;margin-top:6px;">Routine: 5 days &nbsp;|&nbsp; Standard: 48 hrs &nbsp;|&nbsp; Urgent: 24 hrs &nbsp;|&nbsp; Emergency: immediate</p>
+      <p>Reference: <span id="apanel-ref" class="rcode"></span> — your email client will open with the contact list pre-addressed to <strong id="pend-email-display">your email</strong>.</p>
+      <p>Send the email to complete delivery. The full contact list is also available below to copy or download immediately.</p>
+      <p style="font-size:.74rem;color:#888;margin-top:6px;">A copy is BCC'd to the RSG Office for records.</p>
     </div>
-    <div class="alert" id="email-alert">✅ Your email client has been opened with the pre-filled approval request. Please send it.</div>
+    <div class="alert" id="email-alert">✅ The contact list has been sent to <strong id="alert-email"></strong> — check your inbox. The full list is also available below to copy or download.</div>
     <div class="ssum" id="pend-sum"></div>
     <div class="pend-wrap">
       <button class="exp-btn" onclick="toggleExp()"><span id="exp-icon">▶</span> <span id="exp-lbl">Preview contact list that will be released</span></button>
@@ -924,10 +924,8 @@ function toggleExp(){
 // REOPEN email client (for "Open Approval Email" button)
 // ══════════════════════════════════════════════════════
 function reopenEmail(){
-  if(window._mailtoLink){
-    window.location.href = window._mailtoLink;
-    document.getElementById('email-alert').classList.add('show');
-  }
+  // Email was sent server-side — nothing to re-open
+  document.getElementById('email-alert').classList.add('show');
 }
 
 // ══════════════════════════════════════════════════════
@@ -1009,52 +1007,33 @@ function doSubmit(){
 
   const contactText = buildContactText(combined, lists, ref, sgName, chapterName, recipientEmail);
 
-  // ── Log to Google Sheet (fire-and-forget — never blocks UI) ─────────────
+  // ── POST to Apps Script: logs to sheet AND emails contacts to requester ──
+  // The Apps Script uses GmailApp.sendEmail() to deliver the full contact
+  // list directly to recipientEmail. No mailto or browser limit issues.
   fetch(SHEET_ENDPOINT, {
-    method:'POST', mode:'no-cors',
-    headers:{'Content-Type':'application/json'},
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      timestamp: new Date().toISOString(), reference: ref,
-      requestorType: roleLabel, requestorName: sgName,
-      chapter: chapterName+(code?' ('+code+')':''),
-      email: recipientEmail, phone: phone||'—',
-      contactList: lists, category: purpose,
-      urgency: urgency, description: details,
-      status:'Pending Approval', approvalEmail: APPROVAL_EMAIL
+      formType:      'SG-CDR',
+      timestamp:     new Date().toISOString(),
+      reference:     ref,
+      requestorType: roleLabel,
+      requestorName: sgName,
+      chapter:       chapterName + (code ? ' (' + code + ')' : ''),
+      email:         recipientEmail,
+      phone:         phone || '—',
+      contactList:   lists,
+      category:      purpose,
+      urgency:       urgency,
+      description:   details,
+      status:        'Sent',
+      approvalEmail: APPROVAL_EMAIL,
+      contactText:   contactText,
+      contactCount:  combined.length
     })
-  }).catch(()=>{});
-
-  // ── Send approval email via mailto (opens email client) ──
-  // NOTE: Contact list is intentionally excluded from the mailto body to avoid
-  // URL length limits (browsers silently fail above ~2,000 chars encoded).
-  // The full contact list is available on the pending screen to copy / download.
-  const approvalBody =
-`SLPPNA CONTACT DIRECTORY REQUEST — APPROVAL REQUIRED
-Reference: ${ref}
-Date:      ${todayStr()}
-Urgency:   ${urgency}
-
-REQUESTER
-Name:      ${sgName} — ${roleLabel}
-Chapter:   ${chapterName}
-Email:     ${recipientEmail}
-Phone:     ${phone||'—'}
-
-REQUEST DETAILS
-Lists:     ${lists}
-Category:  ${purpose}
-Purpose:   ${details}
-
-ACTION REQUIRED
-Please review this request and release the contact list to: ${recipientEmail}
-The full contact list (${combined.length} contacts) is available in the SLPPNA CDR log sheet.
-
-Reference: ${ref} — SLPPNA Regional Secretariat`;
-
-  const mailSubject = encodeURIComponent('[APPROVAL REQUIRED] SLPPNA CDR ' + ref + ' — ' + urgency);
-  const mailBody    = encodeURIComponent(approvalBody);
-  const mailtoLink  = 'mailto:' + APPROVAL_EMAIL + '?cc=' + encodeURIComponent(recipientEmail) + '&subject=' + mailSubject + '&body=' + mailBody;
-  window._mailtoLink = mailtoLink;
+  }).catch(() => {});
+  // No window._mailtoLink needed — delivery is handled server-side by Apps Script
 
   // ── Store globals ─────────────────────────────────────
   window._submittedContacts = combined;
@@ -1065,6 +1044,10 @@ Reference: ${ref} — SLPPNA Regional Secretariat`;
   // ── Show pending screen ───────────────────────────────
   document.getElementById('apanel-ref').textContent  = ref;
   document.getElementById('pend-ref').textContent    = 'Reference: ' + ref;
+  const pendEmail = document.getElementById('pend-email-display');
+  if(pendEmail) pendEmail.textContent = recipientEmail;
+  const alertEmail = document.getElementById('alert-email');
+  if(alertEmail) alertEmail.textContent = recipientEmail;
   document.getElementById('pend-sum').innerHTML =
     '<strong>Reference:</strong> '+ref+'<br>'+
     '<strong>Requester:</strong> '+sgName+' — '+roleLabel+'<br>'+
@@ -1080,11 +1063,8 @@ Reference: ${ref} — SLPPNA Regional Secretariat`;
   document.getElementById('main-form').style.display    = 'none';
   document.getElementById('pending-screen').style.display = 'block';
 
-  // Auto-open email client after short delay
-  setTimeout(()=>{
-    window.location.href = mailtoLink;
-    document.getElementById('email-alert').classList.add('show');
-  }, 800);
+  // Email is sent server-side by Apps Script — no mailto needed
+  document.getElementById('email-alert').classList.add('show');
 }
 
 // ══════════════════════════════════════════════════════
