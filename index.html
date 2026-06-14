@@ -949,7 +949,7 @@ function doDownload(){
 // ══════════════════════════════════════════════════════
 // SUBMIT — sends approval request via Anthropic API
 // ══════════════════════════════════════════════════════
-async function doSubmit(){
+function doSubmit(){
   if(!validate()) return;
 
   const btn = document.getElementById('btn-sub');
@@ -1009,45 +1009,51 @@ async function doSubmit(){
 
   const contactText = buildContactText(combined, lists, ref, sgName, chapterName, recipientEmail);
 
-  // ── Log to Google Sheet ───────────────────────────────
-  try {
-    await fetch(SHEET_ENDPOINT, {
-      method:'POST', mode:'no-cors',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        timestamp: new Date().toISOString(), reference: ref,
-        requestorType: roleLabel, requestorName: sgName,
-        chapter: chapterName+(code?' ('+code+')':''),
-        email: recipientEmail, phone: phone||'—',
-        contactList: lists, category: purpose,
-        urgency: urgency, description: details,
-        status:'Pending Approval', approvalEmail: APPROVAL_EMAIL
-      })
-    });
-  } catch(e){ console.warn('Sheet log failed:', e); }
+  // ── Log to Google Sheet (fire-and-forget — never blocks UI) ─────────────
+  fetch(SHEET_ENDPOINT, {
+    method:'POST', mode:'no-cors',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      timestamp: new Date().toISOString(), reference: ref,
+      requestorType: roleLabel, requestorName: sgName,
+      chapter: chapterName+(code?' ('+code+')':''),
+      email: recipientEmail, phone: phone||'—',
+      contactList: lists, category: purpose,
+      urgency: urgency, description: details,
+      status:'Pending Approval', approvalEmail: APPROVAL_EMAIL
+    })
+  }).catch(()=>{});
 
   // ── Send approval email via mailto (opens email client) ──
+  // NOTE: Contact list is intentionally excluded from the mailto body to avoid
+  // URL length limits (browsers silently fail above ~2,000 chars encoded).
+  // The full contact list is available on the pending screen to copy / download.
   const approvalBody =
-`SLPPNA CONTACT DIRECTORY REQUEST
-Reference: ${ref}  |  Date: ${todayStr()}  |  Urgency: ${urgency}
+`SLPPNA CONTACT DIRECTORY REQUEST — APPROVAL REQUIRED
+Reference: ${ref}
+Date:      ${todayStr()}
+Urgency:   ${urgency}
 
-REQUESTER: ${sgName} — ${roleLabel}
+REQUESTER
+Name:      ${sgName} — ${roleLabel}
 Chapter:   ${chapterName}
 Email:     ${recipientEmail}
 Phone:     ${phone||'—'}
 
-CONTACT LIST REQUESTED: ${lists}
+REQUEST DETAILS
+Lists:     ${lists}
 Category:  ${purpose}
 Purpose:   ${details}
 
-ACTION: Please approve and forward the contact list below to: ${recipientEmail}
+ACTION REQUIRED
+Please review this request and release the contact list to: ${recipientEmail}
+The full contact list (${combined.length} contacts) is available in the SLPPNA CDR log sheet.
 
-${'='.repeat(50)}
-${contactText}`;
+Reference: ${ref} — SLPPNA Regional Secretariat`;
 
-  const mailSubject = encodeURIComponent('[APPROVAL REQUIRED] SLPPNA CDR — '+ref+' — '+urgency);
+  const mailSubject = encodeURIComponent('[APPROVAL REQUIRED] SLPPNA CDR ' + ref + ' — ' + urgency);
   const mailBody    = encodeURIComponent(approvalBody);
-  const mailtoLink  = 'mailto:'+APPROVAL_EMAIL+'?cc='+encodeURIComponent(recipientEmail)+'&subject='+mailSubject+'&body='+mailBody;
+  const mailtoLink  = 'mailto:' + APPROVAL_EMAIL + '?cc=' + encodeURIComponent(recipientEmail) + '&subject=' + mailSubject + '&body=' + mailBody;
   window._mailtoLink = mailtoLink;
 
   // ── Store globals ─────────────────────────────────────
