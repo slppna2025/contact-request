@@ -435,11 +435,11 @@ input::placeholder, textarea::placeholder { color: #aaa; }
     <p id="pend-ref" style="font-size:.76rem;color:#aaa;"></p>
     <div class="apanel">
       <h4>⏳ Approval Process</h4>
-      <p>Reference: <span id="apanel-ref" class="rcode"></span> — your email client will open with the contact list pre-addressed to <strong id="pend-email-display">your email</strong>.</p>
-      <p>Send the email to complete delivery. The full contact list is also available below to copy or download immediately.</p>
-      <p style="font-size:.74rem;color:#888;margin-top:6px;">A copy is BCC'd to the RSG Office for records.</p>
+      <p>Reference: <span id="apanel-ref" class="rcode"></span>
+      — ready to send via WhatsApp to the RSG Office.</p>
+      <p>Once received, the RSG Office will send you the contact list.</p>
     </div>
-    <div class="alert" id="email-alert">✅ The contact list has been sent to <strong id="alert-email"></strong> — check your inbox. The full list is also available below to copy or download.</div>
+    <div class="alert" id="email-alert">WhatsApp has opened — send the pre-filled message to notify the RSG Office.</div>
     <div class="ssum" id="pend-sum"></div>
     <div class="pend-wrap">
       <button class="exp-btn" onclick="toggleExp()"><span id="exp-icon">▶</span> <span id="exp-lbl">Preview contact list that will be released</span></button>
@@ -450,7 +450,7 @@ input::placeholder, textarea::placeholder { color: #aaa; }
       </div>
     </div>
     <div class="pend-actions">
-      <button class="btn btn-g" onclick="reopenEmail()">✉ Open Approval Email</button>
+      <button class="btn btn-g" onclick="reopenWA()">Open WhatsApp</button>
       <button class="btn btn-gold" onclick="window.print()">🖨 Print</button>
       <button class="btn btn-o" onclick="doReset()">Submit Another</button>
     </div>
@@ -461,8 +461,8 @@ input::placeholder, textarea::placeholder { color: #aaa; }
     <div class="si si-ok">
       <svg viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="14" stroke="#c9a227" stroke-width="2"/><path d="M9 16.5l5 5 9-9" stroke="#c9a227" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </div>
-    <h3>Contacts Released</h3>
-    <p>The contact list has been sent to your email.</p>
+    <h3>Request Submitted</h3>
+    <p>Your reference number is shown below. WhatsApp will open automatically — send the pre-filled message to notify the RSG Office.</p>
     <div class="ssum" id="succ-sum"></div>
     <div id="co">
       <h4>📞 Contact Information Released</h4>
@@ -472,6 +472,7 @@ input::placeholder, textarea::placeholder { color: #aaa; }
     </div>
     <div style="margin-top:20px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
       <button class="btn btn-gold" onclick="window.print()">🖨 Print / PDF</button>
+      <button class="btn btn-g" onclick="if(window._waURL)window.open(window._waURL,'_blank')">&#128230; Open WhatsApp</button>
       <button class="btn btn-o" onclick="doReset()">Submit Another</button>
     </div>
   </div>
@@ -923,9 +924,8 @@ function toggleExp(){
 // ══════════════════════════════════════════════════════
 // REOPEN email client (for "Open Approval Email" button)
 // ══════════════════════════════════════════════════════
-function reopenEmail(){
-  // Email was sent server-side — nothing to re-open
-  document.getElementById('email-alert').classList.add('show');
+function reopenWA(){
+  if(window._waURL){ window.open(window._waURL,'_blank'); }
 }
 
 // ══════════════════════════════════════════════════════
@@ -945,128 +945,103 @@ function doDownload(){
 }
 
 // ══════════════════════════════════════════════════════
-// SUBMIT — sends approval request via Anthropic API
+// SUBMIT — opens WhatsApp with pre-filled request message
 // ══════════════════════════════════════════════════════
 function doSubmit(){
   if(!validate()) return;
 
   const btn = document.getElementById('btn-sub');
   btn.disabled = true;
-  btn.innerHTML = '<span class="spin"></span>Submitting…';
+  btn.innerHTML = '<span class="spin"></span>Preparing…';
 
-  const code      = document.getElementById('sel-chapter').value;
-  const type      = getRequestorType();
+  const code       = document.getElementById('sel-chapter').value;
+  const type       = getRequestorType();
   const typeLabels = {sg:'Secretary General', chair:'Chapter Chair', exec:'Regional Executive', member:'General Member'};
   const roleLabel  = typeLabels[type];
 
-  // ── Resolve requester identity ────────────────────────
   let sgName, chapterName, phone, recipientEmail;
   if(type==='exec'){
     const idx = parseInt(document.getElementById('sel-exec').value);
     const ec  = EXEC_CONTACTS[idx];
-    sgName        = ec.name;
-    chapterName   = ec.chapter;
-    phone         = ec.phone;
-    recipientEmail= ec.email || document.getElementById('inp-override').value.trim();
+    sgName=ec.name; chapterName=ec.chapter; phone=ec.phone;
+    recipientEmail=ec.email||document.getElementById('inp-override').value.trim();
   } else if(type==='sg'){
-    const sg  = SG_DATA[code];
-    sgName        = sg.name;
-    chapterName   = sg.chapter;
-    phone         = sg.phone;
-    recipientEmail= sg.email || document.getElementById('inp-override').value.trim();
+    const sg=SG_DATA[code];
+    sgName=sg.name; chapterName=sg.chapter; phone=sg.phone;
+    recipientEmail=sg.email||document.getElementById('inp-override').value.trim();
   } else if(type==='chair'){
-    const chair = CHAIR_CONTACTS.find(c=>c.chapter.startsWith(code+' '));
-    sgName        = chair ? chair.name : document.getElementById('inp-name').value.trim();
-    chapterName   = chair ? chair.chapter : (SG_DATA[code]||{}).chapter||code;
-    phone         = chair ? chair.phone : document.getElementById('inp-phone').value.trim();
-    recipientEmail= (chair&&chair.email) ? chair.email : document.getElementById('inp-override').value.trim();
+    const chair=CHAIR_CONTACTS.find(c=>c.chapter.startsWith(code+' '));
+    sgName=chair?chair.name:document.getElementById('inp-name').value.trim();
+    chapterName=chair?chair.chapter:(SG_DATA[code]||{}).chapter||code;
+    phone=chair?chair.phone:document.getElementById('inp-phone').value.trim();
+    recipientEmail=(chair&&chair.email)?chair.email:document.getElementById('inp-override').value.trim();
   } else {
-    sgName        = document.getElementById('inp-name').value.trim();
-    const cs      = document.getElementById('sel-chapter');
-    chapterName   = cs.value ? cs.options[cs.selectedIndex].text : 'Not specified';
-    phone         = document.getElementById('inp-phone').value.trim() || '—';
-    recipientEmail= document.getElementById('inp-email').value.trim();
+    sgName=document.getElementById('inp-name').value.trim();
+    const cs=document.getElementById('sel-chapter');
+    chapterName=cs.value?cs.options[cs.selectedIndex].text:'Not specified';
+    phone=document.getElementById('inp-phone').value.trim()||'-';
+    recipientEmail=document.getElementById('inp-email').value.trim();
   }
 
-  const cardNo   = (document.getElementById('inp-card')||{}).value||'';
-  const position = (document.getElementById('inp-pos')||{}).value||'';
-  const purpose  = document.getElementById('sel-purpose').value;
-  const urgency  = document.getElementById('sel-urgency').value;
-  const details  = document.getElementById('inp-details').value.trim();
-  const wantExec  = document.getElementById('chk-exec').checked;
-  const wantChairs= document.getElementById('chk-chairs').checked;
-  const wantSGs   = document.getElementById('chk-sgs').checked;
-  const ref       = genRef(code);
-  const lists     = [wantExec?'Regional Executive':null, wantChairs?'Chapter Chairs':null, wantSGs?'Secretary Generals':null].filter(Boolean).join(' + ');
+  const purpose    = document.getElementById('sel-purpose').value;
+  const urgency    = document.getElementById('sel-urgency').value;
+  const details    = document.getElementById('inp-details').value.trim();
+  const wantExec   = document.getElementById('chk-exec').checked;
+  const wantChairs = document.getElementById('chk-chairs').checked;
+  const wantSGs    = document.getElementById('chk-sgs').checked;
+  const ref        = genRef(code);
+  const lists      = [wantExec?'Regional Executive':null,wantChairs?'Chapter Chairs':null,wantSGs?'Secretary Generals':null].filter(Boolean).join(' + ');
 
-  // ── Build combined contacts ───────────────────────────
   let combined = [];
-  if(wantExec)   combined = combined.concat(EXEC_CONTACTS);
-  if(wantChairs) combined = combined.concat(CHAIR_CONTACTS);
-  if(wantSGs)    combined = combined.concat(SG_CONTACTS);
+  if(wantExec)   combined=combined.concat(EXEC_CONTACTS);
+  if(wantChairs) combined=combined.concat(CHAIR_CONTACTS);
+  if(wantSGs)    combined=combined.concat(SG_CONTACTS);
 
   const contactText = buildContactText(combined, lists, ref, sgName, chapterName, recipientEmail);
 
-  // ── POST to Apps Script: logs to sheet AND emails contacts to requester ──
-  // The Apps Script uses GmailApp.sendEmail() to deliver the full contact
-  // list directly to recipientEmail. No mailto or browser limit issues.
-  fetch(SHEET_ENDPOINT, {
-    method: 'POST',
-    mode: 'no-cors',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      formType:      'SG-CDR',
-      timestamp:     new Date().toISOString(),
-      reference:     ref,
-      requestorType: roleLabel,
-      requestorName: sgName,
-      chapter:       chapterName + (code ? ' (' + code + ')' : ''),
-      email:         recipientEmail,
-      phone:         phone || '—',
-      contactList:   lists,
-      category:      purpose,
-      urgency:       urgency,
-      description:   details,
-      status:        'Sent',
-      approvalEmail: APPROVAL_EMAIL,
-      contactText:   contactText,
-      contactCount:  combined.length
-    })
-  }).catch(() => {});
-  // No window._mailtoLink needed — delivery is handled server-side by Apps Script
+  // Build WhatsApp message
+  const waMsg =
+'*SLPPNA CONTACT DIRECTORY REQUEST*\n' +
+'*Ref:* ' + ref + '\n' +
+'*Date:* ' + todayStr() + '\n' +
+'*Urgency:* ' + urgency + '\n\n' +
+'*REQUESTER*\n' +
+'Name: ' + sgName + ' - ' + roleLabel + '\n' +
+'Chapter: ' + chapterName + '\n' +
+'Send list to: ' + recipientEmail + '\n' +
+'Phone: ' + (phone||'-') + '\n\n' +
+'*LISTS REQUESTED:* ' + lists + ' (' + combined.length + ' contacts)\n' +
+'*Category:* ' + purpose + '\n' +
+'*Purpose:* ' + details + '\n\n' +
+'_Please send the contact list to ' + recipientEmail + '_';
 
-  // ── Store globals ─────────────────────────────────────
+  const waURL = 'https://wa.me/19199234764?text=' + encodeURIComponent(waMsg);
+
   window._submittedContacts = combined;
   window._submittedRef      = ref;
   window._contactText       = contactText;
-  window._submittedMeta     = {sgName, chapterName, code, recipientEmail, lists, purpose, urgency, details};
+  window._waURL             = waURL;
 
-  // ── Show pending screen ───────────────────────────────
-  document.getElementById('apanel-ref').textContent  = ref;
-  document.getElementById('pend-ref').textContent    = 'Reference: ' + ref;
-  const pendEmail = document.getElementById('pend-email-display');
-  if(pendEmail) pendEmail.textContent = recipientEmail;
-  const alertEmail = document.getElementById('alert-email');
-  if(alertEmail) alertEmail.textContent = recipientEmail;
-  document.getElementById('pend-sum').innerHTML =
-    '<strong>Reference:</strong> '+ref+'<br>'+
-    '<strong>Requester:</strong> '+sgName+' — '+roleLabel+'<br>'+
-    '<strong>Chapter:</strong> '+chapterName+'<br>'+
-    '<strong>Send to:</strong> '+recipientEmail+'<br>'+
-    '<strong>Lists:</strong> '+lists+'<br>'+
-    '<strong>Category:</strong> '+purpose+'<br>'+
-    '<strong>Urgency:</strong> '+urgency+'<br>'+
-    '<strong>Date:</strong> '+todayStr();
+  // Populate success screen
+  document.getElementById('succ-sum').innerHTML =
+    '<strong>Reference:</strong> ' + ref + '<br>' +
+    '<strong>Requester:</strong> ' + sgName + '<br>' +
+    '<strong>Chapter:</strong> ' + chapterName + '<br>' +
+    '<strong>Contact list will be sent to:</strong> ' + recipientEmail;
 
-  renderContactCards(combined, 'pend-cards');
+  renderContactCards(combined, 'co-cards');
 
-  document.getElementById('main-form').style.display    = 'none';
-  document.getElementById('pending-screen').style.display = 'block';
+  // Switch to success screen
+  document.getElementById('main-form').style.display      = 'none';
+  document.getElementById('pending-screen').style.display = 'none';
+  document.getElementById('success-screen').style.display = 'block';
 
-  // Email is sent server-side by Apps Script — no mailto needed
-  document.getElementById('email-alert').classList.add('show');
+  // Open WhatsApp
+  setTimeout(()=>{ window.open(waURL, '_blank'); }, 500);
+
+  btn.disabled  = false;
+  btn.innerHTML = 'Submit Request';
 }
-
 // ══════════════════════════════════════════════════════
 // COPY contacts as plain text
 // ══════════════════════════════════════════════════════
